@@ -18,13 +18,20 @@ public class LessonDataSource implements DataSource {
 
   private final DataSource originalDataSource;
 
+  // CS2413 Group 6 - L3: restricted login for the SQL-injection endpoints
+  private final RestrictedLessonAccount restrictedAccount;
+
   public LessonDataSource(DataSource dataSource) {
     this.originalDataSource = dataSource;
+    this.restrictedAccount = new RestrictedLessonAccount(dataSource);
   }
 
   @Override
   public Connection getConnection() throws SQLException {
-    var targetConnection = originalDataSource.getConnection();
+    var targetConnection =
+        RestrictedLessonAccount.appliesToCurrentRequest()
+            ? restrictedAccount.open()
+            : originalDataSource.getConnection();
     return (Connection)
         Proxy.newProxyInstance(
             ConnectionProxy.class.getClassLoader(),
