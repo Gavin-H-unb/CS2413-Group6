@@ -91,6 +91,15 @@ lookup still shows the new salary:
 
 ![Allowed raise](docs/l4/raise-allowed.png)
 
+## Tests
+
+[`IntegrityRulesTest`](src/test/java/org/owasp/webgoat/lessons/sqlinjection/IntegrityRulesTest.java) runs the
+lesson migrations on an in-memory HSQLDB and checks every rule, plus the changes that must still work:
+
+```shell
+./mvnw -Dtest=IntegrityRulesTest test
+```
+
 ## Limitations
 
 - Only implausible changes are blocked. Moving Tobi to Sales (A5) is a believable change, so it is allowed.
