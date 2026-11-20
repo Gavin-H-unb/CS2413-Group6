@@ -1,3 +1,104 @@
+# CS2413 Group 6 - L4: Database integrity rules
+
+This branch holds Layer 4 of our WebGoat database integrity project. L4 puts integrity rules inside the
+database itself, so they still hold if the application code is bypassed or an injected query reaches the
+database.
+
+Everything is in one Flyway migration:
+[`V2026_11_08_1__integrity_db_rules.sql`](src/main/resources/lessons/sqlinjection/db/migration/V2026_11_08_1__integrity_db_rules.sql).
+WebGoat runs it whenever a user's SQL injection lesson tables are created or reset.
+
+## Rules
+
+| Rule | Type | Refuses |
+|---|---|---|
+| `IG_EMP_SALARY_RANGE` | CHECK | a salary outside 0 - 250000 |
+| `IG_EMP_TAN_FORMAT` | CHECK | an auth_tan that isn't 6 characters A-Z / 0-9 |
+| `IG_EMP_RAISE_CAP` | trigger | a raise of more than 10% in a single UPDATE |
+| `IG_EMP_IMMUTABLE_IDS` | trigger | changing an employee's userid or auth_tan |
+| `IG_LOG_NO_DELETE`, `IG_LOG_NO_UPDATE` | trigger | deleting or editing access_log rows |
+| `IG_CRED_NO_DIRECT_UPDATE` | trigger | changing a password or userid in sql_challenge_users with a plain UPDATE |
+
+The triggers run before the change is saved and raise `SQLSTATE '45000'` with an "Integrity rule: ..."
+message, which cancels the whole statement. Since the database enforces them, they apply to every account,
+including the SA account the lessons connect with.
+
+## Running it
+
+You need JDK 25.
+
+```shell
+git clone https://github.com/Gavin-H-unb/CS2413-Group6.git
+cd CS2413-Group6
+git checkout maurya/l4-db-rules
+./mvnw spring-boot:run        # Windows: .\mvnw.cmd spring-boot:run
+```
+
+Open http://127.0.0.1:8080/WebGoat, register a user, and reset the SQL Injection lesson so the migration runs.
+
+This branch also contains L2 and L3, which stop A1, A4 and A8 in the application before they reach the
+database. The screenshots below were taken on the original WebGoat with only the L4 file added, so L4 is
+the only thing in the way.
+
+## Before and after
+
+### A1 - change John Smith's salary (SQL Injection intro, page 12)
+
+Input: `Smith` / `3SL99A'; UPDATE employees SET salary=99999 WHERE last_name='Smith'--`
+
+Before - the salary becomes 99999:
+
+![A1 before](docs/l4/a1-before.png)
+
+After - refused by `IG_EMP_RAISE_CAP`:
+
+![A1 after](docs/l4/a1-after.png)
+
+### A4 - wipe the access log (SQL Injection intro, page 13)
+
+Input: `%'; DELETE FROM access_log;--`. One lookup was done on page 11 first so the log has an entry.
+
+Before - the attack runs and a search afterwards finds nothing:
+
+![A4 before](docs/l4/a4-before.png)
+![A4 before, log empty](docs/l4/a4-before-log.png)
+
+After - refused by `IG_LOG_NO_DELETE`, and the entry is still there:
+
+![A4 after](docs/l4/a4-after.png)
+![A4 after, log intact](docs/l4/a4-after-log.png)
+
+### A8 - take over Tom's account (SQL Injection advanced, page 5)
+
+Register with username `x'; UPDATE sql_challenge_users SET password='pwned1' WHERE userid='tom'--`, then log
+in as `tom` / `pwned1`.
+
+Before - the registration goes through and the login as Tom works:
+
+![A8 before, register](docs/l4/a8-before-register.png)
+![A8 before, login](docs/l4/a8-before-login.png)
+
+After - the registration fails (this lesson hides database errors behind "Something went wrong") and Tom's
+password is unchanged, so the login fails:
+
+![A8 after, register](docs/l4/a8-after-register.png)
+![A8 after, login](docs/l4/a8-after-login.png)
+
+### Normal use still works
+
+A 4% raise (`UPDATE employees SET salary=67000 WHERE userid='37648'` on page 3) is allowed, and the page 11
+lookup still shows the new salary:
+
+![Allowed raise](docs/l4/raise-allowed.png)
+
+## Limitations
+
+- Only implausible changes are blocked. Moving Tobi to Sales (A5) is a believable change, so it is allowed.
+- These rules can't stop `DROP TABLE` (A3) or schema and privilege changes (A6, A7). L3's least-privilege
+  account covers those.
+
+---
+
 # WebGoat: A deliberately insecure Web Application
 
 [![Build](https://github.com/WebGoat/WebGoat/actions/workflows/build.yml/badge.svg?branch=develop)](https://github.com/WebGoat/WebGoat/actions/workflows/build.yml)
